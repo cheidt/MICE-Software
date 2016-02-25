@@ -173,27 +173,27 @@ class Tracker_Mapping:
 
       if bulk == 1:
         plane = 0
-        in_chan = 213 - x
+        in_chan = x
       elif bulk == 2:
         if x < 86:
           plane = 0
-          in_chan = 213 - (x + 128)
+          in_chan = x + 128
         else:
           plane = 2
-          in_chan = 213 - (x - 86)
+          in_chan = x - 86
       elif bulk == 3:
         plane = 2
-        in_chan = 213 - (x + 42)
+        in_chan = x + 42
       elif bulk == 4:
         if x < 42:
           plane = 2
-          in_chan = 213 - (x + 170)
+          in_chan = x + 170
         else:
           plane = 1
-          in_chan = 213 - (x - 42)
+          in_chan = x - 42
       elif bulk == 5:
         plane = 1
-        in_chan = 213 - (x + 86)
+        in_chan = x + 86
       else:
         Write_Log("Can not determine plane and channel")
 
