@@ -11,29 +11,31 @@ import _ctypes
 
 class Analysis:
   def __init__ (self):
-  
+
   # defines where to cut on bad channel noise
-    self.bc_noise_cut = 2.0 # twice the expected value 
+    self.bc_noise_cut = 2.0 # twice the expected value
     self.bc_quiet_cut = 0.5 # half the expected value
     self.event_cut = -1     # number of events to process, -1 for all events
-    
-  # Designed mostly for testing purposes, when turned on allows much quicker 
+
+  # Designed mostly for testing purposes, when turned on allows much quicker
   # loading times on data that has already been analyized once.
-    self.load_previous = False
+    self.load_previous = True
     self.save_record = True
     self.previous_filename = "bc_history.root"
 
   # Maus data location
-    self.run_number = "7417"
-    self.data_directory = "/vols/fets2/heidt/offline/data/7417/"
+    # self.run_number = "7417"
+    # self.data_directory = "/vols/fets2/heidt/offline/data/7417/"
+    self.run_number = "8873"
+    self.data_directory = '/media/chris/Research/data/MAUS-2.7.0/6-240/'
     self.scifi_map_file = "scifi_mapping_2015-09-11.txt"
     self.scifi_map_directory = os.environ["MAUS_ROOT_DIR"]+"/files/cabling/"
 
   # Analysis
     self.process()
-  # Output  
+  # Output
     self.Output()
-    
+
 ##################################################################################################
   # Formats the data and calls Bad_Channels() which does the analysis
   def process(self):
@@ -41,7 +43,7 @@ class Analysis:
 
     self.unit_hist = ROOT.TH1D("unit","unit_hist_longr",212,0,212)
     for i in range(212):
-      self.unit_hist.SetBinContent(i,1) 
+      self.unit_hist.SetBinContent(i,1)
 
     if self.load_previous == True:
       self.prev_file = ROOT.TFile(self.previous_filename, "READ")
@@ -52,7 +54,7 @@ class Analysis:
       self.Make_ROOT()
       file_in = self.Load_file()
       print "Reading MAUS processed file: ",file_in
-      root_file = ROOT.TFile(file_in, "READ") 
+      root_file = ROOT.TFile(file_in, "READ")
   # Checks spill/event is good data
       data = ROOT.MAUS.Data()
       tree = root_file.Get("Spill")
@@ -61,6 +63,8 @@ class Analysis:
       tree.SetBranchAddress("data", data)
       print "Filling Histogram"
       peat_count = 0
+      self.noise_est = tree.GetEntries()*.03
+      print self.noise_est
       if self.event_cut > tree.GetEntries() or self.event_cut <= 0:
         self.event_cut = tree.GetEntries()
       for i in range(self.event_cut):
@@ -77,7 +81,7 @@ class Analysis:
 
   # Fills the ROOT containers with data from the MAUS files
         self.Fill_Hists()
-    
+
     check_out = open("check_out.txt", "w")
     for tra in range(0,2):
       for sta in range(1,6):
@@ -95,13 +99,14 @@ class Analysis:
             check_out.write(str(self.dig_cont[tra][sta][pla].GetBinContent(bin)))
             check_out.write("\n")
     check_out.close()
-    
+
     print "Running bad channel analysis"
     self.Bad_Channels()
-    
+
 ##################################################################################################
   # Pulls out tracker digits and sorts them into histos sorted by plane/station/tracker
   def Fill_Hists(self):
+    self.Record["noise"].SetBinContent(1, self.noise_est)
     for rc in range(self.spill.GetReconEvents().size()):
       digit = self.spill.GetReconEvents()[rc].GetSciFiEvent().digits()
       for di in range(len(digit)):
@@ -154,7 +159,7 @@ class Analysis:
       print "NOT FOUND! ",tracker,"  ",station,"  ",plane,"  ",channel
     VLSB=[board,channel_ro]
     return VLSB
-      
+
 ##################################################################################################
   # Calls the recursive functions Hot_Channels() and Shh_Channels() which look
   # for hot and quite channels respectively.
@@ -162,7 +167,7 @@ class Analysis:
     for tra in self.dig_cont:
       for sta in self.dig_cont[tra]:
         for pla in self.dig_cont[tra][sta]:
-          # print "Bad channels analysis in: tracker ", tra," station ",sta," plane ",pla
+          print "Bad channels analysis in: tracker ", tra," station ",sta," plane ",pla
           fit_hist = self.dig_cont[tra][sta][pla]
           self.Hot_Channels(fit_hist)
           self.Shh_Channels(fit_hist)
@@ -175,11 +180,11 @@ class Analysis:
     status=fit_hist.Fit("gaus","SQ")
     fit = "gaus"
     if status.CovMatrixStatus() < 3:
-      # print "Problem with fitting, attempting a linear fit"
+      print "Problem with fitting, attempting a linear fit"
       fit_hist.GetListOfFunctions().Clear()
       status = fit_hist.Fit("pol1","SQ")
-      # fit_hist.Draw()
-      # raw_input("Press Enter to Exit")
+      fit_hist.Draw()
+      raw_input("Press Enter to Exit")
       fit = "pol1"
     return fit
 
@@ -193,10 +198,11 @@ class Analysis:
     hdiff.GetListOfFunctions().Clear()
     bin = hdiff.GetMaximumBin()
     max = hdiff.GetBinContent(int(bin))
-    if (max > self.bc_noise_cut):
+    if max > self.bc_noise_cut and fit_hist.GetBinContent(int(bin)) > self.noise_est:
   # The lines below exists for testing purposes only.
-  #    fit_hist.Draw()
-  #    raw_input("Press Enter to Exit")
+      print "Channel ", int(bin), " looks hot"
+      fit_hist.Draw()
+      raw_input("Press Enter to Exit")
       fit_hist.SetBinContent(bin,0)
       self.Hot_Channels(fit_hist)
 
@@ -213,8 +219,8 @@ class Analysis:
     min = hdiff.GetBinContent(int(bin))
     if (min > 1.0/self.bc_quiet_cut):
   # The lines below exists for testing purposes only.
-  #    fit_hist.Draw()
-  #    raw_input("Press Enter to Exit")
+      fit_hist.Draw()
+      raw_input("Press Enter to Exit")
       fit_hist.SetBinContent(bin,0)
       self.Shh_Channels(fit_hist)
 
@@ -224,6 +230,7 @@ class Analysis:
     print "Creating empty ROOT file"
     self.dig_cont={}
     self.Record={}
+    self.Record["noise"] = ROOT.TH1D("noise", "noise",2,0,2)
     for tra in range(0,2):
       self.dig_cont[tra]={}
       self.Record[tra]={}
@@ -249,6 +256,7 @@ class Analysis:
   def Recreate_ROOT(self):
     print "Loading previously used ROOT file"
     self.dig_cont={}
+    self.noise_est = int(self.prev_file.Get("noise").GetBinContent(1))
     for tra in range(0,2):
       self.dig_cont[tra]={}
       if tra == 0:
@@ -273,6 +281,7 @@ class Analysis:
 
     if self.save_record == True:
       out_record = ROOT.TFile(self.previous_filename,'RECREATE')
+      self.Record["noise"].Write()
       for tr in range(0,2):
         for st in range(1,6):
           for pl in range(0,3):
